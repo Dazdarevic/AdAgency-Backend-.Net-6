@@ -305,7 +305,7 @@ namespace Reklamna_agencija.Controllers
                 {
                     client.EnableSsl = true;
                     client.UseDefaultCredentials = false;
-                    client.Credentials = new NetworkCredential("belkisa.dazdarevic1@gmail.com", "kvazilend5");
+                    client.Credentials = new NetworkCredential("", "");
 
                     var mailMessage = new MailMessage
                     {
