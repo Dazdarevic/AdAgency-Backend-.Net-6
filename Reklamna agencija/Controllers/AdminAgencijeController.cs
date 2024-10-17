@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Reklamna_agencija.Data;
@@ -122,9 +122,11 @@ namespace Reklamna_agencija.Controllers
         {
             return await _context.ReklamniPanoi.ToListAsync();
         }
+
         [HttpGet("panoiPoGradu/{grad}")]
-        public async Task<ActionResult<IEnumerable<ReklamniPano>>> GetPanoiPoGradu(string grad)
+        public async Task<ActionResult<IEnumerable<object>>> GetPanoiPoGradu(string grad)
         {
+            // Uzmemo sve panoe u određenom gradu
             var reklamniPanoi = await _context.ReklamniPanoi
                 .Where(r => r.Grad == grad)
                 .ToListAsync();
@@ -134,8 +136,54 @@ namespace Reklamna_agencija.Controllers
                 return NotFound($"Nema reklamnih panoa za grad {grad}.");
             }
 
-            return reklamniPanoi;
+            // Uzmemo sve reklame za sve panoe u ovom gradu
+            var reklame = await _context.Reklame
+                .Where(r => reklamniPanoi.Select(p => p.Id).Contains(r.ReklamniPanoId))
+                .ToListAsync();
+
+            // Kreiramo listu sa rezultatima koja sadrži i procenat zauzetosti i broj zauzetih dana
+            var result = reklamniPanoi.Select(pano =>
+            {
+                // Ukupan broj dana u tekućoj godini
+                int totalDaysInYear = 365;
+                var currentYearStart = new DateTime(DateTime.Now.Year, 1, 1);
+                var currentYearEnd = new DateTime(DateTime.Now.Year, 12, 31);
+
+                // Filtriramo reklame koje su povezane sa ovim panoom i koje su u tekućoj godini
+                var panoReklame = reklame
+                    .Where(r => r.ReklamniPanoId == pano.Id &&
+                                r.OdDatum <= currentYearEnd &&
+                                r.DoDatum >= currentYearStart)
+                    .ToList();
+
+                // Ukupan broj dana kada je pano bio zauzet unutar tekuće godine
+                int totalZauzetiDani = panoReklame
+                    .Sum(r =>
+                    {
+                // Računamo presek između datuma reklame i tekuće godine
+                        var start = r.OdDatum < currentYearStart ? currentYearStart : r.OdDatum;
+                        var end = r.DoDatum > currentYearEnd ? currentYearEnd : r.DoDatum;
+
+                        return (end - start).Days + 1; // Dodajemo 1 jer je interval inkluzivan
+                    });
+
+                // Ako nema nijedne reklame, zauzetost je 0%
+                double procenatZauzetosti = totalZauzetiDani > 0
+                    ? Math.Round((double)totalZauzetiDani / totalDaysInYear * 100, 2) // Zaokruživanje na 2 decimale
+                    : 0;
+
+                return new
+                {
+                    Pano = pano,
+                    ProcenatZauzetosti = procenatZauzetosti,
+                    BrojDanaZauzetosti = totalZauzetiDani // Dodajemo broj zauzetih dana
+                };
+            });
+
+            return Ok(result);
         }
+
+
         [HttpGet("SlobodniReklamniPanoi/{grad}")]
         public async Task<ActionResult<IEnumerable<ReklamniPano>>> GetSlobodniReklamniPanoi(string grad)
         {
